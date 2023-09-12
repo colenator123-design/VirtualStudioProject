@@ -52,6 +52,11 @@ ExportedObj/
 *.pdb.meta
 *.mdb.meta
 
+# Meta Files built by Visual Studio
+*.meta
+#But not source file with postfix. which is everything but a folder
+!*.*.meta
+
 # Unity3D generated file on crash reports
 sysinfo.txt
 
