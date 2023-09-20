@@ -6,8 +6,8 @@ import mediapipe as mp
 import numpy as np
 
 # Configs
-image_rows = 480
-image_cols = 640
+image_rows = 480.0
+image_cols = 640.0
 cap = cv2.VideoCapture(0)
 cap.set(3, image_cols)
 cap.set(4, image_rows)
@@ -18,6 +18,9 @@ serverAddressPort = ('127.0.0.1', 5052)
 mp_face_mesh = mp.solutions.face_mesh
 # 初始化 Face Mesh 模型
 face_mesh = mp_face_mesh.FaceMesh()
+
+coord_data = (0, 0, 0)
+rotation_data = (0, 0, 0)
 
 
 class Coord:
@@ -32,45 +35,48 @@ def getCenter(img):
     img, bboxs = detector.findFaces(img)
     if bboxs:
         # bboxInfo - "id","bbox","score","center"
-        return bboxs[0]["center"]
-    return (-1, -1)
+        return (bboxs[0]["center"][0] / image_cols, bboxs[0]["center"][1] / image_rows)
+    # if not detected, return the last value
+    return (coord_data[0], coord_data[1])
 
 
 # get depth of face
 # return a integer on the scale of cm
 def getDepth(img):
     results = face_mesh.process(img)
-    if results.multi_face_landmarks:
-        # 取得第一個偵測到的臉部關鍵點
-        face_landmarks = results.multi_face_landmarks[0]
-        # 取得眼睛的關鍵點索引
-        left_eye_l_index = 362
-        left_eye_r_index = 359
-        right_eye_l_index = 133
-        right_eye_r_index = 130
-        # 取得左眼和右眼的座標
-        left_eye_l = face_landmarks.landmark[left_eye_l_index]
-        left_eye_r = face_landmarks.landmark[left_eye_r_index]
-        right_eye_l = face_landmarks.landmark[right_eye_l_index]
-        right_eye_r = face_landmarks.landmark[right_eye_r_index]
-        # 將座標轉換為畫面上的位置
-        left_eye_l = Coord(left_eye_l.x * image_cols,
-                           left_eye_l.y * image_rows)
-        left_eye_r = Coord(left_eye_r.x * image_cols,
-                           left_eye_r.y * image_rows)
-        right_eye_l = Coord(right_eye_l.x * image_cols,
-                            right_eye_l.y * image_rows)
-        right_eye_r = Coord(right_eye_r.x * image_cols,
-                            right_eye_r.y * image_rows)
-        # 計算距離
-        dx = left_eye_r.x - left_eye_l.x
-        dX = 3.5
-        normalizedFocaleX = 1.40625
-        fx = min(image_cols, image_rows) * normalizedFocaleX
-        return int(fx * (dX / dx))
-        # dZ = int(fx * (dX / dx))
+    # if not detected, return the last value
+    if results.multi_face_landmarks is None:
+        return coord_data[2]
+    # 取得第一個偵測到的臉部關鍵點
+    face_landmarks = results.multi_face_landmarks[0]
+    # 取得眼睛的關鍵點索引
+    left_eye_l_index = 362
+    left_eye_r_index = 359
+    right_eye_l_index = 133
+    right_eye_r_index = 130
+    # 取得左眼和右眼的座標
+    left_eye_l = face_landmarks.landmark[left_eye_l_index]
+    left_eye_r = face_landmarks.landmark[left_eye_r_index]
+    right_eye_l = face_landmarks.landmark[right_eye_l_index]
+    right_eye_r = face_landmarks.landmark[right_eye_r_index]
+    # 將座標轉換為畫面上的位置
+    left_eye_l = Coord(left_eye_l.x * image_cols,
+                       left_eye_l.y * image_rows)
+    left_eye_r = Coord(left_eye_r.x * image_cols,
+                       left_eye_r.y * image_rows)
+    right_eye_l = Coord(right_eye_l.x * image_cols,
+                        right_eye_l.y * image_rows)
+    right_eye_r = Coord(right_eye_r.x * image_cols,
+                        right_eye_r.y * image_rows)
+    # 計算距離
+    dx = left_eye_r.x - left_eye_l.x
+    dX = 3.5
+    normalizedFocaleX = 1.40625
+    fx = min(image_cols, image_rows) * normalizedFocaleX
+    return (fx * (dX / dx)) / 100.0
 
-
+# caculate rotation of object
+# return as (pitch, roll, yaw)
 def getAxis(img):
     # setup sampling landmarks
     indexes = [1, 33, 263, 61, 291, 199]
@@ -86,9 +92,9 @@ def getAxis(img):
     imgPts = []
     # process through mediapipe and get face mesh
     results = face_mesh.process(img)
+    # if not detected, return the last value
     if results.multi_face_landmarks is None:
-        print("No faces detected")
-        return
+        return rotation_data
     face_landmarks = results.multi_face_landmarks[0]
     # print("----------")
     # update coords of 6 sampling points
@@ -109,7 +115,7 @@ def getAxis(img):
     success, rvec, tvec = cv2.solvePnP(objPts, imgPts, camMat, None)
     if (not success):
         print("sth went run with solvePnP")
-        return
+        return rotation_data
     rmat, _ = cv2.Rodrigues(rvec)
     sy = math.sqrt(rmat[0, 0] * rmat[0, 0] + rmat[1, 0] * rmat[1, 0])
 
@@ -123,11 +129,7 @@ def getAxis(img):
         x = math.atan2(-rmat[1, 2], rmat[1, 1])
         y = math.atan2(-rmat[2, 0], sy)
         z = 0
-    # print(x / 3.14 * 180,y/ 3.14 * 180,z/ 3.14 * 180)
-    # roll = y
-    # pitch = x
-    # yaw = z
-
+        
     # extend landmark1 (nose) by 0.2 on x, y, z, to make it 3 basis
     worldPts = np.array([objPts[0], objPts[0], objPts[0]])
     worldPts[0][0] += 0.2
@@ -139,7 +141,7 @@ def getAxis(img):
         worldPts, rvec, tvec, camMat, None)
     imagePointsProjected = imagePointsProjected.reshape(-1, 2)
     drawAxis(img, imagePointsProjected)
-    return
+    return (x, y, z)
 
 
 # show the axis calculated fom getAxis()
@@ -179,9 +181,9 @@ if __name__ == '__main__':
         image = cv2.flip(image, flipCode=1)  # 左右翻轉圖像
 
         coord_data = getCenter(image) + (getDepth(image), )
-        getAxis(image)
-        # print(coord_data)
-        data = str.encode(str(coord_data))
+        rotation_data = getAxis(image)
+        
+        data = str.encode(str(coord_data + rotation_data))
         sock.sendto(data, serverAddressPort)
 
         cv2.imshow("image", image)
