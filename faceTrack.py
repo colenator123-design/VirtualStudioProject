@@ -8,7 +8,7 @@ import numpy as np
 # Configs
 image_rows = 480.0
 image_cols = 640.0
-cap = cv2.VideoCapture(0)
+cap = cv2.VideoCapture(1)
 cap.set(3, image_cols)
 cap.set(4, image_rows)
 detector = FaceDetector(minDetectionCon=0.8)
@@ -182,7 +182,7 @@ if __name__ == '__main__':
 
         coord_data = getCenter(image) + (getDepth(image), )
         rotation_data = getAxis(image)
-        
+        print(coord_data)
         data = str.encode(str(coord_data + rotation_data))
         sock.sendto(data, serverAddressPort)
 

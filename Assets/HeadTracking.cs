@@ -47,7 +47,7 @@ public class HeadTracking : MonoBehaviour
 
         rotaions.Add(new Vector3(float.Parse(points[3]) * Mathf.Rad2Deg,
             float.Parse(points[4]) * Mathf.Rad2Deg, float.Parse(points[5]) * Mathf.Rad2Deg));
-        cameraObject.transform.rotation = Quaternion.Euler(AvgOfList(rotaions, 50));
+        // cameraObject.transform.rotation = Quaternion.Euler(AvgOfList(rotaions, 50));
     }
 
     Vector3 AvgOfList(List<Vector3> list, int limit)
